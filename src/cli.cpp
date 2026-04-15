@@ -27,7 +27,9 @@ static void usage() {
       << "  apkx run <package>\n"
       << "  apkx uninstall <package>\n"
       << "  apkx analyze <path.(apk|dex|so)>\n"
-      << "  apkx update             # Check for updates and upgrade\n";
+      << "  apkx update apkx         # Update apkx command to latest version\n"
+      << "  apkx update apps        # Update all installed apps\n"
+      << "  apkx update apps <pkg>  # Update specific app\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -183,73 +185,130 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
     }
     
     if (args.cmd == "update") {
-      std::string home = std::getenv("HOME") ? std::getenv("HOME") : "";
-      std::string repo_dir = home + "/.apkx";
-      std::string install_dir = home + "/.local/bin";
-      
-      // Clone or update repo
-      if (!std::filesystem::exists(repo_dir)) {
-        std::cerr << "[apkx] Cloning repository...\n";
-        std::string clone_cmd = "git clone https://github.com/pandadeliria-jpg/apkx.git " + repo_dir;
-        int rc = system(clone_cmd.c_str());
-        if (rc != 0) {
-          std::cerr << "[apkx] Clone failed.\n";
-          return 1;
-        }
-      } else {
-        std::cerr << "[apkx] Checking for updates...\n";
-        
-        // Force checkout to clean state then pull
-        std::string clean_cmd = "cd " + repo_dir + " && git checkout HEAD -- . && git clean -fd";
-        system(clean_cmd.c_str());
-        
-        std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main";
-        system(fetch_cmd.c_str());
-        
-        // Check if update needed by comparing commit hashes
-        std::string local_hash = "cd " + repo_dir + " && git rev-parse HEAD";
-        std::string remote_hash = "cd " + repo_dir + " && git rev-parse origin/main";
-        
-        char local_buf[64] = {0}, remote_buf[64] = {0};
-        FILE* lf = popen(local_hash.c_str(), "r");
-        if (fgets(local_buf, sizeof(local_buf), lf)) {}
-        pclose(lf);
-        
-        FILE* rf = popen(remote_hash.c_str(), "r");
-        if (fgets(remote_buf, sizeof(remote_buf), rf)) {}
-        pclose(rf);
-        
-        if (std::string(local_buf) == std::string(remote_buf)) {
-          std::cerr << "[apkx] Already on latest version.\n";
-          return 0;
-        }
-        
-        std::cerr << "[apkx] Pulling updates...\n";
-        std::string pull_cmd = "cd " + repo_dir + " && git reset --hard origin/main";
-        int rc2 = system(pull_cmd.c_str());
-        if (rc2 != 0) {
-          std::cerr << "[apkx] Git pull failed.\n";
-          return 1;
-        }
-      }
-      
-      std::cerr << "[apkx] Building...\n";
-      std::string build_dir = repo_dir + "/build";
-      std::filesystem::create_directories(build_dir);
-      std::string clean_cmd = "rm -rf " + build_dir + "/*";
-      system(clean_cmd.c_str());
-      std::string build_cmd = "cd " + build_dir + " && cmake .. && make -j4";
-      int rc = system(build_cmd.c_str());
-      if (rc != 0) {
-        std::cerr << "[apkx] Build failed.\n";
+      if (args.positionals.empty()) {
+        std::cerr << "[apkx] Usage: apkx update apkx | apps [package]\n";
         return 1;
       }
       
-      std::string copy_cmd = "cp " + repo_dir + "/build/apkx " + install_dir + "/apkx && chmod +x " + install_dir + "/apkx";
-      system(copy_cmd.c_str());
+      std::string subcmd = args.positionals[0];
       
-      std::cerr << "[apkx] Updated to latest version!\n";
-      return 0;
+      // apkx update apkx
+      if (subcmd == "apkx") {
+        std::string home = std::getenv("HOME") ? std::getenv("HOME") : "";
+        std::string repo_dir = home + "/.apkx";
+        std::string install_dir = home + "/.local/bin";
+        
+        if (!std::filesystem::exists(repo_dir)) {
+          std::cerr << "[apkx] Cloning repository...\n";
+          std::string clone_cmd = "git clone https://github.com/pandadeliria-jpg/apkx.git " + repo_dir;
+          int rc = system(clone_cmd.c_str());
+          if (rc != 0) {
+            std::cerr << "[apkx] Clone failed.\n";
+            return 1;
+          }
+        } else {
+          std::cerr << "[apkx] Checking for apkx updates...\n";
+          std::string clean_cmd = "cd " + repo_dir + " && git checkout HEAD -- . && git clean -fd";
+          system(clean_cmd.c_str());
+          
+          std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main";
+          system(fetch_cmd.c_str());
+          
+          char local_buf[64] = {0}, remote_buf[64] = {0};
+          FILE* lf = popen(("cd " + repo_dir + " && git rev-parse HEAD").c_str(), "r");
+          if (fgets(local_buf, sizeof(local_buf), lf)) {}
+          pclose(lf);
+          
+          FILE* rf = popen(("cd " + repo_dir + " && git rev-parse origin/main").c_str(), "r");
+          if (fgets(remote_buf, sizeof(remote_buf), rf)) {}
+          pclose(rf);
+          
+          if (std::string(local_buf) == std::string(remote_buf)) {
+            std::cerr << "[apkx] Already on latest version.\n";
+            return 0;
+          }
+          
+          std::cerr << "[apkx] Pulling updates...\n";
+          system(("cd " + repo_dir + " && git reset --hard origin/main").c_str());
+        }
+        
+        std::cerr << "[apkx] Building...\n";
+        std::string build_dir = repo_dir + "/build";
+        std::filesystem::create_directories(build_dir);
+        system(("rm -rf " + build_dir + "/*").c_str());
+        int rc = system(("cd " + build_dir + " && cmake .. && make -j4").c_str());
+        if (rc != 0) {
+          std::cerr << "[apkx] Build failed.\n";
+          return 1;
+        }
+        
+        system(("cp " + repo_dir + "/build/apkx " + install_dir + "/apkx && chmod +x " + install_dir + "/apkx").c_str());
+        std::cerr << "[apkx] Updated to latest version!\n";
+        return 0;
+      }
+      
+      // apkx update apps [package]
+      if (subcmd == "apps") {
+        std::string pkg_to_update;
+        if (args.positionals.size() > 1) {
+          pkg_to_update = args.positionals[1];
+        }
+        
+        auto paths = default_paths();
+        auto reg = load_registry(paths.registry_json);
+        
+        if (reg.apps.empty()) {
+          std::cerr << "[apkx] No apps installed.\n";
+          return 0;
+        }
+        
+        auto cache_dir = std::filesystem::path(std::getenv("HOME")) / ".android_compat" / "cache";
+        std::filesystem::create_directories(cache_dir);
+        
+        int updated = 0;
+        
+        for (const auto& [pkg, app] : reg.apps) {
+          if (!pkg_to_update.empty() && pkg != pkg_to_update) continue;
+          
+          std::cerr << "[apkx] Updating " << pkg << "...\n";
+          
+          std::string cmd = "~/.cargo/bin/apkeep -a " + pkg + " -d apk-pure " + cache_dir.string();
+          int rc = system(cmd.c_str());
+          
+          if (rc != 0) {
+            std::cerr << "[apkx] Failed to download " << pkg << "\n";
+            continue;
+          }
+          
+          std::filesystem::path apk_path = cache_dir / (pkg + ".apk");
+          if (!std::filesystem::exists(apk_path)) {
+            apk_path = cache_dir / (pkg + ".xapk");
+          }
+          
+          if (!std::filesystem::exists(apk_path)) {
+            std::cerr << "[apkx] Downloaded file not found for " << pkg << "\n";
+            continue;
+          }
+          
+          // Re-install (overwrite)
+          try {
+            auto new_app = install_apk(paths, reg, apk_path);
+            reg.apps[pkg] = new_app;
+            std::cerr << "[apkx] Updated " << pkg << "\n";
+            updated++;
+          } catch (const std::exception& e) {
+            std::cerr << "[apkx] Failed to install " << pkg << ": " << e.what() << "\n";
+          }
+        }
+        
+        save_registry(paths.registry_json, reg);
+        std::cerr << "[apkx] Updated " << updated << " app(s).\n";
+        return 0;
+      }
+      
+      std::cerr << "[apkx] Unknown update target: " << subcmd << "\n";
+      std::cerr << "[apkx] Use: apkx update apkx | apps [package]\n";
+      return 1;
     }
 
   usage();
