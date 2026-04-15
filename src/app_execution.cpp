@@ -231,21 +231,88 @@ public:
         
         const auto& methods = dex_.getMethodIds();
         
-        // First pass: look for standard entry points
-        const char* entry_methods[] = {"onCreate", "main", "run", "onResume", "onStart", "attachBaseContext", "onApplicationCreate"};
+        // Priority order: look for these first
+        const char* priority_methods[] = {
+            "onCreate",           // Android Activity onCreate
+            "onStart",            // Android Activity onStart
+            "onResume",           // Android Activity onResume
+            "onRestart",          // Android Activity onRestart
+            "main",               // Standard main
+            "run",                // Standard run
+            "onApplicationCreate", // Flutter entry
+            "onCreate(Bundle)",   // Android onCreate with Bundle
+        };
         
-        for (const char* mname : entry_methods) {
-            for (uint32_t i = 0; i < std::min(methods.size(), size_t(5000)); i++) {
-                std::string name = dex_.getMethodName(i);
-                if (name == mname) {
+        // First pass: prioritize known Android entry points
+        for (uint32_t i = 0; i < methods.size(); i++) {
+            std::string name = dex_.getMethodName(i);
+            for (const char* mname : priority_methods) {
+                if (name == mname || name.find(mname) == 0) {
                     MethodCode code = dex_.getMethodCode(i);
-                    // Accept smaller code for onCreate
-                    if (code.valid && code.code_size >= 4) {
+                    if (code.valid && !code.bytecode.empty()) {
                         std::string cname = dex_.getTypeName(methods[i].class_idx);
-                        std::cout << "  [+] Found executable: " << cname << "." << name << "\n";
+                        std::cout << "  [+] Found priority entry: " << cname << "." << name 
+                                  << " (" << code.code_size << " bytes)\n";
                         return execute(i);
                     }
                 }
+            }
+        }
+        
+        // Second pass: look for any onCreate variant
+        std::cout << "  [*] Searching for onCreate variants...\n";
+        for (uint32_t i = 0; i < methods.size(); i++) {
+            std::string name = dex_.getMethodName(i);
+            if (name.find("onCreate") != std::string::npos) {
+                MethodCode code = dex_.getMethodCode(i);
+                if (code.valid && !code.bytecode.empty()) {
+                    std::string cname = dex_.getTypeName(methods[i].class_idx);
+                    std::cout << "  [+] Found onCreate: " << cname << "." << name 
+                              << " (" << code.code_size << " bytes)\n";
+                    return execute(i);
+                }
+            }
+        }
+        
+        // Third pass: look for main in any class
+        for (uint32_t i = 0; i < methods.size(); i++) {
+            std::string name = dex_.getMethodName(i);
+            if (name == "main") {
+                MethodCode code = dex_.getMethodCode(i);
+                if (code.valid && !code.bytecode.empty()) {
+                    std::string cname = dex_.getTypeName(methods[i].class_idx);
+                    std::cout << "  [+] Found main: " << cname << "." << name << "\n";
+                    return execute(i);
+                }
+            }
+        }
+        
+        // Fourth pass: look for methods starting with "on" (lifecycle methods)
+        std::cout << "  [*] Looking for lifecycle methods...\n";
+        for (uint32_t i = 0; i < methods.size(); i++) {
+            std::string name = dex_.getMethodName(i);
+            if (name.length() > 2 && name.substr(0, 2) == "on" && 
+                (name.find("Activity") != std::string::npos || name.find("Create") != std::string::npos || 
+                 name.find("Start") != std::string::npos || name.find("Resume") != std::string::npos)) {
+                MethodCode code = dex_.getMethodCode(i);
+                if (code.valid && !code.bytecode.empty()) {
+                    std::string cname = dex_.getTypeName(methods[i].class_idx);
+                    std::cout << "  [+] Found lifecycle: " << cname << "." << name << "\n";
+                    return execute(i);
+                }
+            }
+        }
+        
+        // Fifth pass: any method with bytecode
+        std::cout << "  [*] Falling back to any method with bytecode...\n";
+        for (uint32_t i = 0; i < methods.size(); i++) {
+            MethodCode code = dex_.getMethodCode(i);
+            if (code.valid && !code.bytecode.empty() && code.code_size > 4) {
+                std::string name = dex_.getMethodName(i);
+                std::string cname = dex_.getTypeName(methods[i].class_idx);
+                std::cout << "  [!] Using fallback: " << cname << "." << name 
+                          << " (" << code.code_size << " bytes)\n";
+                return execute(i);
             }
         }
         
