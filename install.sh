@@ -20,11 +20,10 @@ else
 fi
 
 echo "Building apkx..."
-cd "$REPO_DIR/android_compat_cpp"
 mkdir -p build
 cd build
 cmake .. >/dev/null 2>&1
-make -j$(nproc) >/dev/null 2>&1
+make -j4 >/dev/null 2>&1
 
 cp build/apkx "$INSTALL_DIR/apkx"
 chmod +x "$INSTALL_DIR/apkx"

@@ -223,7 +223,7 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
       std::filesystem::create_directories(build_dir);
       std::string clean_cmd = "rm -rf " + build_dir + "/*";
       system(clean_cmd.c_str());
-      std::string build_cmd = "cd " + build_dir + " && cmake .. && make -j$(nproc)";
+      std::string build_cmd = "cd " + build_dir + " && cmake .. && make -j4";
       int rc = system(build_cmd.c_str());
       if (rc != 0) {
         std::cerr << "[apkx] Build failed.\n";
