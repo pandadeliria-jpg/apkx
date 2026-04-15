@@ -198,6 +198,11 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
         }
       } else {
         std::cerr << "[apkx] Checking for updates...\n";
+        
+        // Clean local build to avoid merge conflicts
+        std::string clean_build = "rm -rf " + repo_dir + "/build";
+        system(clean_build.c_str());
+        
         std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main 2>/dev/null";
         system(fetch_cmd.c_str());
         
