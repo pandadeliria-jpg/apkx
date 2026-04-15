@@ -26,7 +26,8 @@ static void usage() {
       << "  apkx info <package>\n"
       << "  apkx run <package>\n"
       << "  apkx uninstall <package>\n"
-      << "  apkx analyze <path.(apk|dex|so)>\n";
+      << "  apkx analyze <path.(apk|dex|so)>\n"
+      << "  apkx update             # Check for updates and upgrade\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -175,11 +176,61 @@ int run_cli(const Args& args) {
     std::cout << "[apkx] Analyzing APK: " << p << "\n";
     DexLoader dex;
     if (dex.load(p.string())) {
-      std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
-      std::cout << "  Methods: " << dex.getMethodCount() << "\n";
+std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
+        std::cout << "  Methods: " << dex.getMethodCount() << "\n";
+      }
+      return 0;
     }
-    return 0;
-  }
+    
+    if (args.cmd == "update") {
+      std::string home = std::getenv("HOME") ? std::getenv("HOME") : "";
+      std::string repo_dir = home + "/.apkx";
+      
+      if (!std::filesystem::exists(repo_dir)) {
+        std::cerr << "[apkx] Not installed. Run install.sh first.\n";
+        return 1;
+      }
+      
+      std::cerr << "[apkx] Checking for updates...\n";
+      std::string cmd = "cd " + repo_dir + " && git fetch origin && git diff HEAD origin/main --quiet && echo 'up to date' || echo 'update available'";
+      FILE* pipe = popen(cmd.c_str(), "r");
+      char buf[128];
+      bool needs_update = true;
+      if (fgets(buf, sizeof(buf), pipe)) {
+        if (std::string(buf).find("up to date") != std::string::npos) {
+          needs_update = false;
+        }
+      }
+      pclose(pipe);
+      
+      if (!needs_update) {
+        std::cerr << "[apkx] Already on latest version.\n";
+        return 0;
+      }
+      
+      std::cerr << "[apkx] Update available! Pulling...\n";
+      std::string pull_cmd = "cd " + repo_dir + " && git pull origin main";
+      int rc = system(pull_cmd.c_str());
+      if (rc != 0) {
+        std::cerr << "[apkx] Git pull failed.\n";
+        return 1;
+      }
+      
+      std::cerr << "[apkx] Building...\n";
+      std::string build_cmd = "cd " + repo_dir + "/android_compat_cpp/build && cmake .. >/dev/null 2>&1 && make -j$(nproc) >/dev/null 2>&1";
+      rc = system(build_cmd.c_str());
+      if (rc != 0) {
+        std::cerr << "[apkx] Build failed.\n";
+        return 1;
+      }
+      
+      std::string install_bin = home + "/.local/bin/apkx";
+      std::string copy_cmd = "cp " + repo_dir + "/android_compat_cpp/build/apkx " + install_bin;
+      rc = system(copy_cmd.c_str());
+      
+      std::cerr << "[apkx] Updated to latest version!\n";
+      return 0;
+    }
 
   usage();
   return 1;
