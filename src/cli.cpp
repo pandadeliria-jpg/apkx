@@ -219,7 +219,7 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
       }
       
       std::cerr << "[apkx] Building...\n";
-      std::string build_dir = repo_dir + "/android_compat_cpp/build";
+      std::string build_dir = repo_dir + "/build";
       std::filesystem::create_directories(build_dir);
       std::string build_cmd = "cd " + build_dir + " && cmake .. && make -j$(nproc)";
       int rc = system(build_cmd.c_str());
@@ -228,7 +228,7 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
         return 1;
       }
       
-      std::string copy_cmd = "cp " + repo_dir + "/android_compat_cpp/build/apkx " + install_dir + "/apkx && chmod +x " + install_dir + "/apkx";
+      std::string copy_cmd = "cp " + repo_dir + "/build/apkx " + install_dir + "/apkx && chmod +x " + install_dir + "/apkx";
       system(copy_cmd.c_str());
       
       std::cerr << "[apkx] Updated to latest version!\n";
