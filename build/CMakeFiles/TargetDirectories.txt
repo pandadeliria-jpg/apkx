@@ -1,0 +1,3 @@
+/Users/danuta/robloxgen/android_compat_cpp/build/CMakeFiles/apkx.dir
+/Users/danuta/robloxgen/android_compat_cpp/build/CMakeFiles/edit_cache.dir
+/Users/danuta/robloxgen/android_compat_cpp/build/CMakeFiles/rebuild_cache.dir
