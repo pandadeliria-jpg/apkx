@@ -199,23 +199,33 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
       } else {
         std::cerr << "[apkx] Checking for updates...\n";
         
-        // Clean local build to avoid merge conflicts
-        std::string clean_build = "rm -rf " + repo_dir + "/build";
-        system(clean_build.c_str());
+        // Reset to clean state and fetch
+        std::string reset_cmd = "cd " + repo_dir + " && git reset --hard HEAD && git clean -fd";
+        system(reset_cmd.c_str());
         
-        std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main 2>/dev/null";
+        std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main";
         system(fetch_cmd.c_str());
         
-        // Check if update needed
-        std::string diff_cmd = "cd " + repo_dir + " && git diff HEAD origin/main --quiet";
-        int rc = system(diff_cmd.c_str());
-        if (rc == 0) {
+        // Check if update needed by comparing commit hashes
+        std::string local_hash = "cd " + repo_dir + " && git rev-parse HEAD";
+        std::string remote_hash = "cd " + repo_dir + " && git rev-parse origin/main";
+        
+        char local_buf[64] = {0}, remote_buf[64] = {0};
+        FILE* lf = popen(local_hash.c_str(), "r");
+        if (fgets(local_buf, sizeof(local_buf), lf)) {}
+        pclose(lf);
+        
+        FILE* rf = popen(remote_hash.c_str(), "r");
+        if (fgets(remote_buf, sizeof(remote_buf), rf)) {}
+        pclose(rf);
+        
+        if (std::string(local_buf) == std::string(remote_buf)) {
           std::cerr << "[apkx] Already on latest version.\n";
           return 0;
         }
         
         std::cerr << "[apkx] Pulling updates...\n";
-        std::string pull_cmd = "cd " + repo_dir + " && git pull origin main";
+        std::string pull_cmd = "cd " + repo_dir + " && git checkout main && git pull origin main";
         int rc2 = system(pull_cmd.c_str());
         if (rc2 != 0) {
           std::cerr << "[apkx] Git pull failed.\n";
