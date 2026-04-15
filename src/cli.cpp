@@ -199,9 +199,9 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
       } else {
         std::cerr << "[apkx] Checking for updates...\n";
         
-        // Reset to clean state and fetch
-        std::string reset_cmd = "cd " + repo_dir + " && git reset --hard HEAD && git clean -fd";
-        system(reset_cmd.c_str());
+        // Force checkout to clean state then pull
+        std::string clean_cmd = "cd " + repo_dir + " && git checkout HEAD -- . && git clean -fd";
+        system(clean_cmd.c_str());
         
         std::string fetch_cmd = "cd " + repo_dir + " && git fetch origin main";
         system(fetch_cmd.c_str());
@@ -225,7 +225,7 @@ std::cout << "\n  Classes: " << dex.getClassCount() << "\n";
         }
         
         std::cerr << "[apkx] Pulling updates...\n";
-        std::string pull_cmd = "cd " + repo_dir + " && git checkout main && git pull origin main";
+        std::string pull_cmd = "cd " + repo_dir + " && git reset --hard origin/main";
         int rc2 = system(pull_cmd.c_str());
         if (rc2 != 0) {
           std::cerr << "[apkx] Git pull failed.\n";
