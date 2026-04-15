@@ -74,6 +74,15 @@ SyscallResult BionicDarwinTranslator::translate(
         case Syscall::CLOSE:
             return sys_close(static_cast<int>(arg0));
         
+        case Syscall::PIPE2:
+            return sys_pipe2(reinterpret_cast<int*>(arg0), 
+                            static_cast<int>(arg1));
+        
+        case Syscall::DUP3:
+            return sys_dup3(static_cast<int>(arg0),
+                           static_cast<int>(arg1),
+                           static_cast<int>(arg2));
+        
         case Syscall::LSEEK:
             return sys_lseek(static_cast<int>(arg0),
                            static_cast<off_t>(arg1),
@@ -99,6 +108,33 @@ SyscallResult BionicDarwinTranslator::translate(
         
         case Syscall::EXIT:
             return sys_exit(static_cast<int>(arg0));
+        
+        case Syscall::EXECVE:
+            return sys_execve(reinterpret_cast<const char*>(arg0),
+                             reinterpret_cast<char* const*>(arg1),
+                             reinterpret_cast<char* const*>(arg2));
+        
+        case Syscall::WAIT4:
+            return sys_wait4(static_cast<pid_t>(arg0),
+                            reinterpret_cast<int*>(arg1),
+                            static_cast<int>(arg2),
+                            reinterpret_cast<void*>(arg3));
+        
+        case Syscall::RT_SIGACTION:
+            return sys_rt_sigaction(static_cast<int>(arg0),
+                                   reinterpret_cast<const void*>(arg1),
+                                   reinterpret_cast<void*>(arg2),
+                                   static_cast<size_t>(arg3));
+        
+        case Syscall::SOCKET:
+            return sys_socket(static_cast<int>(arg0),
+                             static_cast<int>(arg1),
+                             static_cast<int>(arg2));
+        
+        case Syscall::CONNECT:
+            return sys_connect(static_cast<int>(arg0),
+                              reinterpret_cast<const void*>(arg1),
+                              static_cast<size_t>(arg2));
         
         case Syscall::GETTIME: {
             struct timespec ts;
@@ -186,6 +222,30 @@ SyscallResult BionicDarwinTranslator::sys_lseek(int fd, off_t offset,
     return SyscallResult(result);
 }
 
+SyscallResult BionicDarwinTranslator::sys_pipe2(int* pipefd, int flags) {
+    int host_pipefd[2];
+    int res = ::pipe(host_pipefd);
+    if (res < 0) return SyscallResult(-errno);
+    
+    pipefd[0] = fd_table_.allocate();
+    fd_table_.set(pipefd[0], host_pipefd[0]);
+    pipefd[1] = fd_table_.allocate();
+    fd_table_.set(pipefd[1], host_pipefd[1]);
+    
+    return SyscallResult(0);
+}
+
+SyscallResult BionicDarwinTranslator::sys_dup3(int oldfd, int newfd, int flags) {
+    int host_oldfd = fd_table_.get(oldfd);
+    if (host_oldfd < 0) return SyscallResult(-EBADF);
+    
+    int host_newfd = ::dup(host_oldfd);
+    if (host_newfd < 0) return SyscallResult(-errno);
+    
+    fd_table_.set(newfd, host_newfd);
+    return SyscallResult(newfd);
+}
+
 SyscallResult BionicDarwinTranslator::sys_mmap(void* addr, size_t length,
                                                 int prot, int flags,
                                                 int fd, off_t offset) {
@@ -219,6 +279,51 @@ SyscallResult BionicDarwinTranslator::sys_gettid() {
 SyscallResult BionicDarwinTranslator::sys_exit(int code) {
     ::exit(code);
     return SyscallResult(0);  // Never reached
+}
+
+SyscallResult BionicDarwinTranslator::sys_execve(const char* filename, 
+                                                 char* const argv[], 
+                                                 char* const envp[]) {
+    // Redirect path
+    std::string host_path = path_redirect_.redirect(filename);
+    int res = ::execve(host_path.c_str(), argv, envp);
+    if (res < 0) return SyscallResult(-errno);
+    return SyscallResult(0);
+}
+
+SyscallResult BionicDarwinTranslator::sys_wait4(pid_t pid, int* status, 
+                                               int options, void* rusage) {
+    int res = ::wait4(pid, status, options, (struct rusage*)rusage);
+    if (res < 0) return SyscallResult(-errno);
+    return SyscallResult(res);
+}
+
+SyscallResult BionicDarwinTranslator::sys_rt_sigaction(int signum, 
+                                                      const void* act, 
+                                                      void* oact, 
+                                                      size_t sigsetsize) {
+    // Simple stub for now - sigaction structures differ between Android/Darwin
+    std::cout << "[*] sigaction for signal " << signum << " (stub)\n";
+    return SyscallResult(0);
+}
+
+SyscallResult BionicDarwinTranslator::sys_socket(int domain, int type, 
+                                                int protocol) {
+    int fd = ::socket(domain, type, protocol);
+    if (fd < 0) return SyscallResult(-errno);
+    int android_fd = fd_table_.allocate();
+    fd_table_.set(android_fd, fd);
+    return SyscallResult(android_fd);
+}
+
+SyscallResult BionicDarwinTranslator::sys_connect(int sockfd, 
+                                                 const void* addr, 
+                                                 size_t addrlen) {
+    int host_fd = fd_table_.get(sockfd);
+    if (host_fd < 0) return SyscallResult(-EBADF);
+    int res = ::connect(host_fd, (const struct sockaddr*)addr, addrlen);
+    if (res < 0) return SyscallResult(-errno);
+    return SyscallResult(0);
 }
 
 SyscallResult BionicDarwinTranslator::sys_gettime(int clock_id, 
@@ -260,6 +365,8 @@ void BionicDarwinTranslator::initIoctlMap() {
     // These are often different between platforms
     ioctl_map_[0x5401] = TIOCMGET;  // TCGETS
     ioctl_map_[0x5402] = TIOCMSET;  // TCSETS
+    ioctl_map_[0x5413] = TIOCGWINSZ; // Linux TIOCGWINSZ -> Darwin TIOCGWINSZ
+    ioctl_map_[0x5414] = TIOCSWINSZ; // Linux TIOCSWINSZ -> Darwin TIOCSWINSZ
     // ... more mappings needed
 }
 

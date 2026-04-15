@@ -26,7 +26,12 @@ namespace Syscall {
     constexpr uint64_t IOCTL = 29;
     constexpr uint64_t GETPID = 172;
     constexpr uint64_t GETTID = 178;
-    constexpr uint64_t CLONE = 220;  // pthread_create
+    constexpr uint64_t CLONE = 220;  // pthread_create / fork
+    constexpr uint64_t EXECVE = 221;
+    constexpr uint64_t WAIT4 = 260;
+    constexpr uint64_t PIPE2 = 59;
+    constexpr uint64_t DUP3 = 24;
+    constexpr uint64_t RT_SIGACTION = 134;
     constexpr uint64_t FUTEX = 98;
     constexpr uint64_t GETTIME = 113;
     constexpr uint64_t SOCKET = 198;
@@ -95,6 +100,8 @@ public:
     SyscallResult sys_write(int fd, const void* buf, size_t count);
     SyscallResult sys_close(int fd);
     SyscallResult sys_lseek(int fd, off_t offset, int whence);
+    SyscallResult sys_pipe2(int* pipefd, int flags);
+    SyscallResult sys_dup3(int oldfd, int newfd, int flags);
     
     // Memory operations
     SyscallResult sys_mmap(void* addr, size_t length, int prot, 
@@ -109,11 +116,17 @@ public:
     SyscallResult sys_futex(uint32_t* uaddr, int futex_op, 
                             int val, uint64_t timeout,
                             uint32_t* uaddr2, int val3);
+    SyscallResult sys_rt_sigaction(int signum, const void* act, 
+                                   void* oact, size_t sigsetsize);
     
     // Process
     SyscallResult sys_getpid();
     SyscallResult sys_gettid();
     SyscallResult sys_exit(int code);
+    SyscallResult sys_execve(const char* filename, char* const argv[], 
+                             char* const envp[]);
+    SyscallResult sys_wait4(pid_t pid, int* status, int options, 
+                           void* rusage);
     
     // Time
     SyscallResult sys_gettime(int clock_id, struct timespec* tp);

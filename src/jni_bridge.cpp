@@ -96,6 +96,26 @@ void JNIEnvironment::initializeBuiltinMethods() {
         [](JNIEnv* env, jobject thiz, const std::vector<void*>& args) {
             std::cout << "[JNI] Looper.loop() - would block forever\n";
         });
+
+    // Build.VERSION.SDK_INT
+    registerMethod("android/os/Build$VERSION", "SDK_INT", "I",
+        [](JNIEnv* env, jobject thiz, const std::vector<void*>& args) {
+            std::cout << "[JNI] Build.VERSION.SDK_INT -> 33\n";
+        });
+
+    // Settings.Secure.getString
+    registerMethod("android/provider/Settings$Secure", "getString", 
+        "(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;",
+        [](JNIEnv* env, jobject thiz, const std::vector<void*>& args) {
+            std::cout << "[JNI] Settings.Secure.getString()\n";
+        });
+
+    // Context.getSystemService
+    registerMethod("android/content/Context", "getSystemService", 
+        "(Ljava/lang/String;)Ljava/lang/Object;",
+        [](JNIEnv* env, jobject thiz, const std::vector<void*>& args) {
+            std::cout << "[JNI] Context.getSystemService()\n";
+        });
 }
 
 void JNIEnvironment::registerMethod(const std::string& class_name,

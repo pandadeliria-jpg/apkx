@@ -96,35 +96,51 @@ int run_cli(const Args& args) {
     return 0;
   }
 
+  if (args.cmd == "search") {
+    if (args.positionals.empty()) throw std::runtime_error("search requires <query>");
+    std::string query = args.positionals[0];
+    std::cout << "[apkx] Searching for '" << query << "' with apkeep...\n";
+    std::string cmd = "~/.cargo/bin/apkeep search " + query;
+    system(cmd.c_str());
+    return 0;
+  }
+
   if (args.cmd == "add") {
     // Install APK using apkeep
-    if (args.positionals.size() != 1) throw std::runtime_error("add requires <package>");
+    if (args.positionals.empty()) throw std::runtime_error("add requires <package>");
     std::string package = args.positionals[0];
+    std::string provider = "apk-pure";
+    if (args.positionals.size() >= 2) {
+        provider = args.positionals[1];
+    }
     
-    std::cerr << "[apkx] Downloading " << package << " with apkeep...\n";
+    std::cerr << "[apkx] Downloading " << package << " from " << provider << " with apkeep...\n";
     
     auto cache_dir = std::filesystem::path(std::getenv("HOME")) / ".android_compat" / "cache";
     std::filesystem::create_directories(cache_dir);
     
     // Use apkeep to download
-    std::string cmd = "~/.cargo/bin/apkeep -a " + package + " -d apk-pure " + cache_dir.string();
+    std::string cmd = "~/.cargo/bin/apkeep -a " + package + " -d " + provider + " " + cache_dir.string();
     int rc = system(cmd.c_str());
     if (rc != 0) {
         std::cerr << "[apkx] apkeep failed: " << rc << "\n";
         return 1;
     }
     
-    // Find downloaded APK (apkeep may create .apk or .xapk file)
+    // Find downloaded APK (apkeep may create .apk, .xapk or .apks file)
     std::filesystem::path apk_path;
-    auto apk_apath = cache_dir / (package + ".apk");
-    auto xapk_path = cache_dir / (package + ".xapk");
+    for (const auto& entry : std::filesystem::directory_iterator(cache_dir)) {
+        if (entry.path().filename().string().find(package) != std::string::npos) {
+            auto ext = entry.path().extension().string();
+            if (ext == ".apk" || ext == ".xapk" || ext == ".apks") {
+                apk_path = entry.path();
+                break;
+            }
+        }
+    }
     
-    if (std::filesystem::exists(apk_apath)) {
-        apk_path = apk_apath;
-    } else if (std::filesystem::exists(xapk_path)) {
-        apk_path = xapk_path;
-    } else {
-        std::cerr << "[apkx] Download failed, file not found: " << package << ".apk or .xapk\n";
+    if (apk_path.empty()) {
+        std::cerr << "[apkx] Download failed, file not found for " << package << "\n";
         return 1;
     }
     

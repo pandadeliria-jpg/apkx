@@ -227,6 +227,7 @@ bool RealDexExecutor::executeInstruction(CallFrame& frame) {
         default:
             // Unknown opcode - skip
             std::cerr << "[!] Unknown opcode: 0x" << std::hex << (int)op << std::dec << " at PC " << frame.pc << "\n";
+            std::cerr << "    (The bytecode interpreter needs more opcodes implemented to fully execute apps)\n";
             frame.pc += 2;
             break;
     }

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
@@ -62,17 +63,6 @@ InstalledApp install_apk(const SandboxPaths& paths, Registry& reg, const fs::pat
   fs::create_directories(data_dir);
   fs::create_directories(cache_dir);
 
-  // Copy APK to installation directory
-  auto installed_apk = install_dir / (pkg + ".apk");
-  fs::copy_file(apk_path, installed_apk, fs::copy_options::overwrite_existing);
-
-  // Extract APK contents:
-  // For now, we shell out to /usr/bin/unzip (present on macOS) to avoid vendoring a zip lib in scaffold step.
-  // This keeps Phase 1 shippable; Phase 2 ports this to native C++ zip parsing.
-  std::string cmd = "unzip -o -q \"" + installed_apk.string() + "\" -d \"" + install_dir.string() + "\"";
-  int rc = std::system(cmd.c_str());
-  if (rc != 0) throw std::runtime_error("failed to unzip apk (rc=" + std::to_string(rc) + ")");
-
   ensure_data_layout(data_dir);
 
   InstalledApp app;
@@ -81,8 +71,47 @@ InstalledApp install_apk(const SandboxPaths& paths, Registry& reg, const fs::pat
   app.install_path = install_dir.string();
   app.data_path = data_dir.string();
   app.cache_path = cache_dir.string();
-  app.apk_path = installed_apk.string();
   app.install_time = now_iso();
+
+  // Copy APK to installation directory
+  auto ext_str = apk_path.extension().string();
+  auto installed_apk = install_dir / (pkg + ext_str);
+  fs::copy_file(apk_path, installed_apk, fs::copy_options::overwrite_existing);
+
+  // Extract APK contents:
+  if (ext_str == ".xapk" || ext_str == ".apks" || ext_str == ".zip") {
+      std::cout << "[apkx] Extracting bundle " << ext_str << "...\n";
+      std::string cmd = "unzip -o -q \"" + installed_apk.string() + "\" -d \"" + install_dir.string() + "\"";
+      system(cmd.c_str());
+      
+      // Look for the largest .apk file inside as the main one, or one named base.apk
+      fs::path main_apk;
+      uintmax_t max_size = 0;
+      for (const auto& entry : fs::recursive_directory_iterator(install_dir)) {
+          if (entry.path().extension() == ".apk") {
+              if (entry.path().filename() == "base.apk") {
+                  main_apk = entry.path();
+                  break;
+              }
+              if (entry.file_size() > max_size) {
+                  max_size = entry.file_size();
+                  main_apk = entry.path();
+              }
+          }
+      }
+      if (!main_apk.empty()) {
+          std::cout << "[apkx] Found main APK: " << main_apk.filename() << "\n";
+          // We keep the bundle structure but track the main APK
+          app.apk_path = main_apk.string();
+      } else {
+          app.apk_path = installed_apk.string();
+      }
+  } else {
+      std::string cmd = "unzip -o -q \"" + installed_apk.string() + "\" -d \"" + install_dir.string() + "\"";
+      int rc = std::system(cmd.c_str());
+      if (rc != 0) throw std::runtime_error("failed to unzip apk (rc=" + std::to_string(rc) + ")");
+      app.apk_path = installed_apk.string();
+  }
 
   return app;
 }
